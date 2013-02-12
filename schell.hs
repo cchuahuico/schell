@@ -8,7 +8,20 @@ data Expr = Number Int
           | Symbol String
           | Boolean String
           | List [Expr]
-    deriving (Show)
+
+instance Show Expr where
+    show (Number num) = show num
+    show (String str) = show str
+    show (Symbol sym) = sym
+    show (Boolean bool) = bool
+    show (List exprs) = show exprs
+
+instance Eq Expr where
+    Number n1 == Number n2 = n1 == n2
+    String s1 == String s2 = s1 == s2
+    Symbol s1 == Symbol s2 = s1 == s2
+    Boolean b1 == Boolean b2 = b1 == b2
+    _ == _ = False
 
 identifierInit :: Parser Char
 identifierInit = oneOf "!$%&*/:<=>?~_^" 
@@ -44,6 +57,7 @@ readString = do
 parseSource :: String -> Either ParseError Expr 
 parseSource input = parse readExpr "No Parse" input
 
+main :: IO ()
 main = do
     putStr "schell> "
     input <- getLine
@@ -52,13 +66,25 @@ main = do
     else
         case parseSource input of 
             (Left _) -> putStrLn "Input Error"
-            (Right expr) -> putStrLn . eval $ expr 
+            (Right expr) -> putStrLn . show . eval $ expr 
     main
 
-eval (Number num) = show num
-eval (String str) = show str
-eval (Boolean bool) = bool
-eval (Symbol sym) = sym
-eval (List l) = show l
-                        
 
+primitives :: [(Expr, [Expr] -> Expr)]
+primitives = [(Symbol "+", arithmeticOp (+)),
+              (Symbol "-", arithmeticOp (-)),
+              (Symbol "*", arithmeticOp (*)),
+              (Symbol "/", arithmeticOp div)]
+
+arithmeticOp :: (Int -> Int -> Int) -> [Expr] -> Expr
+arithmeticOp op exprs = Number $ foldl1 op $ [x | (Number x) <- exprs]
+
+eval :: Expr -> Expr
+eval expr@(List (func:args)) = 
+    case lookup func primitives of
+        (Just f) -> apply f $ map eval args
+        Nothing -> expr
+eval expr = expr
+                        
+apply :: ([Expr] -> Expr) -> [Expr] -> Expr
+apply func args = func args
