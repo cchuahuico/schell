@@ -2,7 +2,6 @@ import Text.ParserCombinators.Parsec
 import Text.Parsec.Token
 import System.Exit
 import Data.Char
-import qualified Data.Map as Map
 
 data Expr = Number Int 
           | String String 
@@ -18,7 +17,7 @@ readExpr = do
     readString <|> readSymbol <|> readBoolean <|> readNumber <|> readLst
 
 readSymbol = do
-    initial <- letter <|> identifierInit
+    initial <- letter <|> identifierInit <|> oneOf "+-"
     subsq <- many (letter <|> identifierInit <|> digit <|> oneOf ".+-")
     return $ Symbol (initial:subsq)
 
