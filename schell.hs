@@ -81,7 +81,14 @@ primitives = [(Symbol "+", arithmeticOp (+)),
               (Symbol "<=", compOp (<=)),
               (Symbol ">", compOp (>)),
               (Symbol ">=", compOp (>=)),
-              (Symbol "=", compOp (==))]
+              (Symbol "=", compOp (==)),
+              (Symbol "and", logicOp and),
+              (Symbol "or", logicOp or),
+              (Symbol "not", notOp),
+              (Symbol "cons", cons),
+              (Symbol "list", list),
+              (Symbol "car", head),
+              (Symbol "cdr", tailOp)]
 
 arithmeticOp :: (Int -> Int -> Int) -> [Expr] -> Expr
 arithmeticOp op exprs = Number $ foldl1 op $ [x | (Number x) <- exprs]
@@ -89,6 +96,21 @@ arithmeticOp op exprs = Number $ foldl1 op $ [x | (Number x) <- exprs]
 compOp :: (Int -> Int -> Bool) -> [Expr] -> Expr
 compOp op args@[Number a, Number b] = Boolean $ op a b
 compOp _ _ = error "Invalid arguments for comparison operator."
+
+logicOp :: ([Bool] -> Bool) -> [Expr] -> Expr
+logicOp op exprs = Boolean $ op [b | (Boolean b) <- exprs]
+
+notOp :: [Expr] -> Expr
+notOp [Boolean b] = Boolean $ not b
+
+tailOp :: [Expr] -> Expr
+tailOp [List xs] = List $ tail xs
+
+cons :: [Expr] -> Expr
+cons [x, List xs] = List (x:xs)
+
+list :: [Expr] -> Expr
+list = List 
 
 eval :: Expr -> Expr
 eval expr@(List (func:args)) = 
