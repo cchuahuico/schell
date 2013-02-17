@@ -6,14 +6,14 @@ import Data.Char
 data Expr = Number Int 
           | String String 
           | Symbol String
-          | Boolean String
+          | Boolean Bool
           | List [Expr]
 
 instance Show Expr where
     show (Number num) = show num
     show (String str) = show str
     show (Symbol sym) = sym
-    show (Boolean bool) = bool
+    show (Boolean bool) = if bool then "#t" else "#f"
     show (List exprs) = show exprs
 
 instance Eq Expr where
@@ -42,7 +42,9 @@ readLst = do
 
 readBoolean = do
     bool <- char '#' >> oneOf "fFtT"
-    return . Boolean $ '#':[toLower bool] 
+    return . Boolean $ case toLower bool of
+                           't' -> True
+                           'f' -> False
 
 readNumber = do
     num <- many1 digit
