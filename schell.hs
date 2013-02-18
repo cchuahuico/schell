@@ -14,7 +14,11 @@ instance Show Expr where
     show (String str) = show str
     show (Symbol sym) = sym
     show (Boolean bool) = if bool then "#t" else "#f"
-    show (List exprs) = show exprs
+    show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
+
+joinOn :: String -> [String] -> String
+joinOn _ [x] = x
+joinOn joinStr (x:xs) = (x ++ joinStr) ++ (joinOn joinStr xs)
 
 instance Eq Expr where
     Number n1 == Number n2 = n1 == n2
