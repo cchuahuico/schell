@@ -61,7 +61,7 @@ readString = do
     return $ String str
 
 parseSource :: String -> Either ParseError Expr 
-parseSource input = parse readExpr "No Parse" input
+parseSource input = parse (skipMany space >> readExpr) "No Parse" input
 
 main :: IO ()
 main = do
@@ -122,9 +122,7 @@ ifConditional [Boolean pred, tbr, fbr]
   | otherwise = eval fbr
 
 eval :: Expr -> Expr
-
 eval (List (Symbol "if":pred:args)) = ifConditional (eval pred:args :: [Expr])
-
 eval expr@(List (func:args)) = 
     case lookup func primitives of
         (Just f) -> apply f $ map eval args
