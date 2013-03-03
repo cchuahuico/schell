@@ -91,8 +91,8 @@ primitives = [(Symbol "+", arithmeticOp (+)),
               (Symbol "not", notOp),
               (Symbol "cons", cons),
               (Symbol "list", list),
-              (Symbol "car", head),
-              (Symbol "cdr", tailOp)]
+              (Symbol "car", car),
+              (Symbol "cdr", cdr)]
 
 arithmeticOp :: (Int -> Int -> Int) -> [Expr] -> Expr
 arithmeticOp op exprs = Number $ foldl1 op $ [x | (Number x) <- exprs]
@@ -107,8 +107,11 @@ logicOp op exprs = Boolean $ op [b | (Boolean b) <- exprs]
 notOp :: [Expr] -> Expr
 notOp [Boolean b] = Boolean $ not b
 
-tailOp :: [Expr] -> Expr
-tailOp [List xs] = List $ tail xs
+car :: [Expr] -> Expr
+car [List xs] = head xs
+
+cdr :: [Expr] -> Expr
+cdr [List xs] = List $ tail xs
 
 cons :: [Expr] -> Expr
 cons [x, List xs] = List (x:xs)
