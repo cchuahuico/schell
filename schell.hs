@@ -116,7 +116,15 @@ cons [x, List xs] = List (x:xs)
 list :: [Expr] -> Expr
 list = List 
 
+ifConditional :: [Expr] -> Expr
+ifConditional [Boolean pred, tbr, fbr] 
+  | pred = eval tbr
+  | otherwise = eval fbr
+
 eval :: Expr -> Expr
+
+eval (List (Symbol "if":pred:args)) = ifConditional (eval pred:args :: [Expr])
+
 eval expr@(List (func:args)) = 
     case lookup func primitives of
         (Just f) -> apply f $ map eval args
