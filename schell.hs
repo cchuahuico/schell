@@ -2,6 +2,8 @@ import Text.ParserCombinators.Parsec
 import Text.Parsec.Token
 import System.Exit
 import Data.Char
+import Data.Either
+import Text.Printf
 
 data Expr = Number Int 
           | String String 
@@ -72,11 +74,14 @@ main = do
     else
         case parseSource input of 
             (Left _) -> putStrLn "Input Error"
-            (Right expr) -> putStrLn . show . eval $ expr 
+            (Right expr) -> 
+                case eval expr of
+                    (Left err) -> putStrLn err
+                    (Right res) -> putStrLn . show $ res
     main
 
 
-primitives :: [(Expr, [Expr] -> Expr)]
+primitives :: [(Expr, [Expr] -> Either String Expr)]
 primitives = [(Symbol "+", arithmeticOp (+)),
               (Symbol "-", arithmeticOp (-)),
               (Symbol "*", arithmeticOp (*)),
@@ -94,43 +99,77 @@ primitives = [(Symbol "+", arithmeticOp (+)),
               (Symbol "car", car),
               (Symbol "cdr", cdr)]
 
-arithmeticOp :: (Int -> Int -> Int) -> [Expr] -> Expr
-arithmeticOp op exprs = Number $ foldl1 op $ [x | (Number x) <- exprs]
+isNumberExpr :: Expr -> Bool
+isNumberExpr (Number _) = True
+isNumberExpr _ = False
 
-compOp :: (Int -> Int -> Bool) -> [Expr] -> Expr
-compOp op args@[Number a, Number b] = Boolean $ op a b
-compOp _ _ = error "Invalid arguments for comparison operator."
+isBoolExpr :: Expr -> Bool
+isBoolExpr (Boolean _) = True
+isBoolExpr _ = False
 
-logicOp :: ([Bool] -> Bool) -> [Expr] -> Expr
-logicOp op exprs = Boolean $ op [b | (Boolean b) <- exprs]
+isListExpr :: Expr -> Bool
+isListExpr (List _) = True
+isListExpr _ = False
 
-notOp :: [Expr] -> Expr
-notOp [Boolean b] = Boolean $ not b
+arithmeticOp :: (Int -> Int -> Int) -> [Expr] -> Either String Expr
+arithmeticOp op exprs 
+    | all isNumberExpr exprs = Right . Number $ foldl1 op [x | (Number x) <- exprs]
+    | otherwise = Left "**Error: \
+          \Arithmetic expressions are of the form: ([+/-/*//] Num1 Num2 .. NumN)**"
 
-car :: [Expr] -> Expr
-car [List xs] = head xs
+compOp :: (Int -> Int -> Bool) -> [Expr] -> Either String Expr
+compOp op [Number a, Number b] = Right . Boolean $ op a b
+compOp _ _ = Left "**Error: \
+    \Comparison expressions are of the form: ([</<=/>/>=/=] Num1 Num2)**"
 
-cdr :: [Expr] -> Expr
-cdr [List xs] = List $ tail xs
+logicOp :: ([Bool] -> Bool) -> [Expr] -> Either String Expr
+logicOp op exprs
+    | all isBoolExpr exprs = Right . Boolean . op $ [b | (Boolean b) <- exprs]
+    | otherwise = Left "**error: \
+          \Logical operators are of the form: ([and/or] expr1 expr2 .. exprN)**"
 
-cons :: [Expr] -> Expr
-cons [x, List xs] = List (x:xs)
+notOp :: [Expr] -> Either String Expr
+notOp [Boolean b] = Right . Boolean . not $ b
+notOp _ = Left "**Error: \
+    \Not logical operators are of the form: (not expr1)**"
 
-list :: [Expr] -> Expr
-list = List 
+car :: [Expr] -> Either String Expr
+car [List xs] = Right . head $ xs
+car _ = Left "**Error: car takes a list of data**"
 
-ifConditional :: [Expr] -> Expr
+
+cdr :: [Expr] -> Either String Expr
+cdr [List xs] = Right . List . tail $ xs
+cdr _ = Left "**Error: cdr takes a list of data**"
+
+cons :: [Expr] -> Either String Expr
+cons [x, List xs] = Right . List $ (x:xs)
+cons _ = Left "**Error: cons expressions are of the form: (cons x (list ..))**"
+
+list :: [Expr] -> Either String Expr
+list = Right . List 
+
+ifConditional :: [Expr] -> Either String Expr
 ifConditional [Boolean pred, tbr, fbr] 
   | pred = eval tbr
   | otherwise = eval fbr
 
-eval :: Expr -> Expr
-eval (List (Symbol "if":pred:args)) = ifConditional (eval pred:args :: [Expr])
+eval :: Expr -> Either String Expr
+eval (List (Symbol "if":pred:args)) =
+    case eval pred of
+        Left _ -> Left "**Error: malformed if expression**"
+        Right boolVal -> ifConditional (boolVal:args)
+
 eval expr@(List (func:args)) = 
     case lookup func primitives of
-        (Just f) -> apply f $ map eval args
-        Nothing -> expr
-eval expr = expr
+        (Just f) 
+            | null . lefts $ evalArgs -> apply f $ rights evalArgs
+            | otherwise -> Left . head . lefts $ evalArgs
+        Nothing -> Left (printf "**Error: function \"%s\" is unbound**" 
+                         (show func) :: String)
+    where evalArgs = map eval args
+
+eval expr = Right expr
                         
-apply :: ([Expr] -> Expr) -> [Expr] -> Expr
+apply :: ([Expr] -> Either String Expr) -> [Expr] -> Either String Expr
 apply func args = func args
