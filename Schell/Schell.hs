@@ -1,12 +1,10 @@
-module Schell.Schell (
-    Expr,
+module Schell (
     parseSource,
     eval
 ) where
 
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Token
-import System.Exit
 import Data.Char
 import Data.Either
 import Text.Printf
@@ -71,21 +69,6 @@ readString = do
 
 parseSource :: String -> Either ParseError Expr 
 parseSource input = parse (skipMany space >> readExpr) "No Parse" input
-
-main :: IO ()
-main = do
-    putStr "schell> "
-    input <- getLine
-    if input == ":q" then
-        exitSuccess
-    else
-        case parseSource input of 
-            (Left _) -> putStrLn "Input Error"
-            (Right expr) -> 
-                case eval expr of
-                    (Left err) -> putStrLn err
-                    (Right res) -> putStrLn . show $ res
-    main
 
 
 primitives :: [(Expr, [Expr] -> Either String Expr)]
