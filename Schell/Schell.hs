@@ -1,3 +1,9 @@
+module Schell.Schell (
+    Expr,
+    parseSource,
+    eval
+) where
+
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Token
 import System.Exit
@@ -27,6 +33,7 @@ instance Eq Expr where
     String s1 == String s2 = s1 == s2
     Symbol s1 == Symbol s2 = s1 == s2
     Boolean b1 == Boolean b2 = b1 == b2
+    List l1 == List l2 = l1 == l2
     _ == _ = False
 
 identifierInit :: Parser Char
