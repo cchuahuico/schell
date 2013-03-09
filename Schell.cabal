@@ -1,0 +1,17 @@
+name:                Schell
+version:             0.1.0.0
+author:              Clarence Chuahuico
+build-type:          Simple
+cabal-version:       >=1.8
+
+executable schell
+  main-is: Main.hs
+  build-depends: base, parsec
+  hs-source-dirs: Schell
+
+Test-suite tests
+  type: exitcode-stdio-1.0
+  hs-source-dirs: Test
+  Main-is: Test.hs
+  build-depends: HUnit
+
