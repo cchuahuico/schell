@@ -11,7 +11,8 @@ executable schell
 
 Test-suite tests
   type: exitcode-stdio-1.0
-  hs-source-dirs: Test
+  hs-source-dirs: Test, Schell
   Main-is: Test.hs
-  build-depends: HUnit
+  build-depends: base, HUnit, parsec
+  other-modules: Schell
 
