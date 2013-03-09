@@ -5,12 +5,12 @@ module Schell (
 ) where
 
 import Text.ParserCombinators.Parsec
-import Text.Parsec.Token
 import Data.Char
 import Data.Either
 import Text.Printf
+import Control.Monad
 
-data Expr = Number Int 
+data Expr = Number Integer
           | String String 
           | Symbol String
           | Boolean Bool
@@ -39,7 +39,7 @@ identifierInit :: Parser Char
 identifierInit = oneOf "!$%&*/:<=>?~_^" 
 
 readExpr = do
-    readString <|> readSymbol <|> readBoolean <|> readNumber <|> readLst
+    readLst <|> readString <|> readNumber <|> readSymbol <|> readBoolean 
 
 readSymbol = do
     initial <- letter <|> identifierInit <|> oneOf "+-"
@@ -58,9 +58,11 @@ readBoolean = do
                            't' -> True
                            'f' -> False
 
+negNum = liftM ('-':) (char '-' >> many1 digit)
+
 readNumber = do
-    num <- many1 digit
-    return . Number $ (read num :: Int)
+    num <- try negNum <|> many1 digit
+    return . Number $ (read num :: Integer)
 
 readString = do
     char '"'
@@ -102,13 +104,13 @@ isListExpr :: Expr -> Bool
 isListExpr (List _) = True
 isListExpr _ = False
 
-arithmeticOp :: (Int -> Int -> Int) -> [Expr] -> Either String Expr
+arithmeticOp :: (Integer -> Integer -> Integer) -> [Expr] -> Either String Expr
 arithmeticOp op exprs 
     | all isNumberExpr exprs = Right . Number $ foldl1 op [x | (Number x) <- exprs]
     | otherwise = Left "**Error: \
           \Arithmetic expressions are of the form: ([+/-/*//] Num1 Num2 .. NumN)**"
 
-compOp :: (Int -> Int -> Bool) -> [Expr] -> Either String Expr
+compOp :: (Integer -> Integer -> Bool) -> [Expr] -> Either String Expr
 compOp op [Number a, Number b] = Right . Boolean $ op a b
 compOp _ _ = Left "**Error: \
     \Comparison expressions are of the form: ([</<=/>/>=/=] Num1 Num2)**"

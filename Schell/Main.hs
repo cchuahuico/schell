@@ -14,7 +14,7 @@ main = forever $ do
           exitSuccess
        else
           case parseSource input of 
-            (Left _) -> putStrLn "Input Error"
+            (Left err) -> putStrLn $ show err
             (Right expr) -> 
                 case eval expr of
                     (Left err) -> putStrLn err
