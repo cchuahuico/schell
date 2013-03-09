@@ -27,5 +27,5 @@ testMultiply = TestCase $ do
     assertEqual "mul-neg" (Number (-5)) (parseEval "(* 5 -1 -1 -1)")
 
 testDivide = TestCase $ do
-    assertEqual "div-0" (String "**Error: Divide by 0 not allowed!**") (parseEval "(/ 5 0)")
+    assertEqual "div-0" (Number 0) (parseEval "(/ 0 17 3)")
     assertEqual "div-10" (Number 10) (parseEval "(/ 100 10)")
