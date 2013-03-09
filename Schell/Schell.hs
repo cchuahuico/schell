@@ -1,4 +1,5 @@
 module Schell (
+    Expr(Number, String, Symbol, Boolean, List),
     parseSource,
     eval
 ) where

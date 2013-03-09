@@ -1,4 +1,6 @@
 module Main where
 
-main :: IO ()
-main = undefined
+import Test.HUnit
+import ParseEvalTest
+
+main = runTestTT $ TestList [arithmeticCases]
