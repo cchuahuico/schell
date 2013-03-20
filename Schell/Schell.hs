@@ -1,9 +1,4 @@
-module Schell (
-  Expr(Number, String, Symbol, Boolean, List),
-  parseSource,
-  eval,
-  createEnv
-) where
+module Schell where
 
 import Text.ParserCombinators.Parsec
 import Data.Char
@@ -18,6 +13,7 @@ data Expr = Number Integer
       | Symbol String
       | Boolean Bool
       | List [Expr]
+      | Void
 
 instance Show Expr where
   show (Number num) = show num
@@ -25,6 +21,7 @@ instance Show Expr where
   show (Symbol sym) = sym
   show (Boolean bool) = if bool then "#t" else "#f"
   show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
+  show Void = "<#void>"
 
 instance Eq Expr where
   Number n1 == Number n2 = n1 == n2
@@ -36,6 +33,8 @@ instance Eq Expr where
 
 data EvalError = UnboundError String
          | SyntaxError String
+         | InvalidArgument String
+         | BindExists String
 
 instance Error EvalError where
   strMsg s = SyntaxError "error"
@@ -43,11 +42,28 @@ instance Error EvalError where
 instance Show EvalError where
   show (UnboundError var) = printf "**Error: identifier: %s not bound.**" var
   show (SyntaxError msg) = printf "**Error: %s.**" msg
+  show (InvalidArgument msg) = printf "**Error: %s. **" msg
+  show (BindExists var) = printf "**Error: binding for %s already exists. **" var
 
 type Env = IORef [(String, IORef Expr)]
 
 createEnv :: IO Env
 createEnv = newIORef []
+
+defineVar :: Env -> Expr -> Expr -> ErrorT EvalError IO ()
+defineVar env symb@(Symbol sym) expr = do
+  val <- liftIO . lookupVar env $ symb
+  case val of 
+    Just actual -> throwError . BindExists . show $ actual
+    Nothing -> liftIO $ do {actual <- newIORef $ expr; 
+      modifyIORef env ((sym, actual):)}
+
+lookupVar :: Env -> Expr -> IO (Maybe Expr)
+lookupVar env (Symbol sym) = do
+  envClose <- readIORef env
+  case lookup sym envClose of
+    Just val -> readIORef val >>= (\actual -> return . Just $ actual)
+    Nothing -> return Nothing
 
 joinOn :: String -> [String] -> String
 joinOn _ [x] = x
@@ -163,12 +179,17 @@ eval :: Env -> Expr -> ErrorT EvalError IO Expr
 
 -- eval for special forms
 eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
-  res <- liftIO . runErrorT . eval env $ pred
+  res <- eval env pred
   case res of
-    Left err -> throwError err
-    Right (Boolean val)
+    (Boolean val)
       | val -> eval env tbr
       | otherwise -> eval env fbr
+    _ -> throwError . InvalidArgument $ "1st argument to if must be a predicate"
+
+eval env (List (Symbol "define":ident:expr:[])) = do
+  evaled <- eval env expr
+  defineVar env ident evaled 
+  return Void
 
 -- eval for function application
 eval env expr@(List (func:args)) = 
@@ -180,7 +201,12 @@ eval env expr@(List (func:args)) =
 eval env num@(Number _) = return num
 eval env bool@(Boolean _) = return bool
 eval env str@(String _) = return str
-eval env (Symbol sym) = throwError . UnboundError $ sym
+
+eval env sym = do
+  value <- liftIO . lookupVar env $ sym 
+  case value of 
+    Just expr -> return expr
+    Nothing -> throwError . UnboundError . show $ sym
             
 apply :: ([Expr] -> ErrorT EvalError IO Expr) -> [Expr] -> ErrorT EvalError IO Expr
 apply func args = func args
