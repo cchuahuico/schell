@@ -34,14 +34,14 @@ instance Eq Expr where
   List l1 == List l2 = l1 == l2
   _ == _ = False
 
-data EvalError = BindError String
+data EvalError = UnboundError String
          | SyntaxError String
 
 instance Error EvalError where
   strMsg s = SyntaxError "error"
 
 instance Show EvalError where
-  show (BindError var) = printf "**Error: %s not bound.**" var
+  show (UnboundError var) = printf "**Error: identifier: %s not bound.**" var
   show (SyntaxError msg) = printf "**Error: %s.**" msg
 
 type Env = IORef [(String, IORef Expr)]
@@ -89,7 +89,7 @@ readString = do
   return $ String str
 
 parseSource :: String -> Either ParseError Expr 
-parseSource input = parse (skipMany space >> readExpr) "No Parse" input
+parseSource input = parse (skipMany space >> readExpr) "Syntax Error" input
 
 
 primitives :: [(Expr, [Expr] -> ErrorT EvalError IO Expr)]
@@ -160,6 +160,8 @@ list :: [Expr] -> ErrorT EvalError IO Expr
 list = return . List 
 
 eval :: Env -> Expr -> ErrorT EvalError IO Expr
+
+-- eval for special forms
 eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
   res <- liftIO . runErrorT . eval env $ pred
   case res of
@@ -168,12 +170,17 @@ eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
       | val -> eval env tbr
       | otherwise -> eval env fbr
 
+-- eval for function application
 eval env expr@(List (func:args)) = 
   case lookup func primitives of
     Just f -> mapM (eval env) args >>= apply f
-    Nothing -> throwError . BindError . show $ func
+    Nothing -> throwError . UnboundError . show $ func
 
-eval env expr = return expr
+-- eval for atoms
+eval env num@(Number _) = return num
+eval env bool@(Boolean _) = return bool
+eval env str@(String _) = return str
+eval env (Symbol sym) = throwError . UnboundError $ sym
             
 apply :: ([Expr] -> ErrorT EvalError IO Expr) -> [Expr] -> ErrorT EvalError IO Expr
 apply func args = func args
