@@ -54,9 +54,16 @@ defineVar :: Env -> Expr -> Expr -> ErrorT EvalError IO ()
 defineVar env symb@(Symbol sym) expr = do
   val <- liftIO . lookupVar env $ symb
   case val of 
-    Just actual -> throwError . BindExists . show $ actual
+    Just actual -> throwError . BindExists $ sym
     Nothing -> liftIO $ do {actual <- newIORef $ expr; 
       modifyIORef env ((sym, actual):)}
+
+setVar :: Env -> Expr -> Expr -> ErrorT EvalError IO ()
+setVar env symb@(Symbol sym) newVal = do
+  envClose <- liftIO . readIORef $ env
+  case lookup sym envClose of 
+    Just val -> liftIO . modifyIORef val $ (\_ -> newVal)  
+    Nothing -> throwError . UnboundError $ sym
 
 lookupVar :: Env -> Expr -> IO (Maybe Expr)
 lookupVar env (Symbol sym) = do
@@ -186,10 +193,21 @@ eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
       | otherwise -> eval env fbr
     _ -> throwError . InvalidArgument $ "1st argument to if must be a predicate"
 
+eval env (List (Symbol "if":_)) = throwError . InvalidArgument $ "syntax error on if special form"
+
 eval env (List (Symbol "define":ident:expr:[])) = do
   evaled <- eval env expr
   defineVar env ident evaled 
   return Void
+
+eval env (List (Symbol "define":_)) = throwError . InvalidArgument $ "syntax error on define special form"
+
+eval env (List (Symbol "set!":ident:expr:[])) = do
+  evaled <- eval env expr
+  setVar env ident evaled
+  return Void
+
+eval env (List (Symbol "set!":_)) = throwError . InvalidArgument $ "syntax error on set! special form"
 
 -- eval for function application
 eval env expr@(List (func:args)) = 
