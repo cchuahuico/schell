@@ -13,7 +13,7 @@ identifierInit :: Parser Char
 identifierInit = oneOf "!$%&*/:<=>?~_^" 
 
 readExpr = do
-  readLst <|> readString <|> readNumber <|> readSymbol <|> readBoolean 
+  readLst <|> readCharacter <|> readString <|> readNumber <|> readSymbol <|> readBoolean 
 
 readSymbol = do
   initial <- letter <|> identifierInit <|> oneOf "+-"
@@ -38,6 +38,11 @@ readNumber = do
   num <- try negNum <|> many1 digit
   return . Number $ (read num :: Integer)
 
+readCharacter = do
+  string "#\\"
+  c <- anyChar
+  return $ Character c
+
 readString = do
   char '"'
   str <- many1 (noneOf "\"")
@@ -48,8 +53,8 @@ parseSource :: String -> Either ParseError Expr
 parseSource input = parse (skipMany space >> readExpr) "Syntax Error" input
 
 
-
 data Expr = Number Integer
+      | Character Char
       | String String 
       | Symbol String
       | Boolean Bool
@@ -59,11 +64,12 @@ data Expr = Number Integer
 
 instance Show Expr where
   show (Number num) = show num
+  show (Character char) = "#\\" ++ [char]
   show (String str) = show str
   show (Symbol sym) = sym
   show (Boolean bool) = if bool then "#t" else "#f"
   show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
-  show Void = "<#void>"
+  show Void = "#<void>"
 
 joinOn :: String -> [String] -> String
 joinOn _ [x] = x
@@ -71,12 +77,12 @@ joinOn joinStr (x:xs) = (x ++ joinStr) ++ (joinOn joinStr xs)
 
 instance Eq Expr where
   Number n1 == Number n2 = n1 == n2
+  Character c1 == Character c2 = c1 == c2
   String s1 == String s2 = s1 == s2
   Symbol s1 == Symbol s2 = s1 == s2
   Boolean b1 == Boolean b2 = b1 == b2
   List l1 == List l2 = l1 == l2
   _ == _ = False
-
 
 
 data EvalError = UnboundError String
@@ -92,7 +98,6 @@ instance Show EvalError where
   show (SyntaxError msg) = printf "**Error: %s.**" msg
   show (InvalidArgument msg) = printf "**Error: %s. **" msg
   show (BindExists var) = printf "**Error: binding for %s already exists. **" var
-
 
 
 -- the type that represents the global environment
@@ -193,7 +198,6 @@ list :: [Expr] -> ErrorT EvalError IO Expr
 list = return . List 
 
 
-
 eval :: Env -> Expr -> ErrorT EvalError IO Expr
 -- eval for special forms
 eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
@@ -220,6 +224,9 @@ eval env (List (Symbol "set!":ident:expr:[])) = do
 
 eval env (List (Symbol "set!":_)) = throwError . InvalidArgument $ "syntax error on set! special form"
 
+eval env (List [Symbol "begin"]) = return Void
+eval env (List (Symbol "begin":exprs)) = mapM (eval env) exprs >>= return . last
+
 -- eval for function application
 eval env expr@(List (func:args)) = 
   case lookup func primitives of
@@ -230,6 +237,7 @@ eval env expr@(List (func:args)) =
 eval env num@(Number _) = return num
 eval env bool@(Boolean _) = return bool
 eval env str@(String _) = return str
+eval env char@(Character _) = return char
 
 eval env sym = do
   value <- liftIO . lookupVar env $ sym 
