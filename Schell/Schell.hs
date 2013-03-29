@@ -13,7 +13,7 @@ identifierInit :: Parser Char
 identifierInit = oneOf "!$%&*/:<=>?~_^" 
 
 readExpr = do
-  readLst <|> readCharacter <|> readString <|> readNumber <|> readSymbol <|> readBoolean 
+  readLst <|> readString <|> readNumber <|> readSymbol <|> readBoolean <|> readCharacter  
 
 readSymbol = do
   initial <- letter <|> identifierInit <|> oneOf "+-"
@@ -27,7 +27,7 @@ readLst = do
   return $ List x
 
 readBoolean = do
-  bool <- char '#' >> oneOf "fFtT"
+  bool <- try (char '#' >> oneOf "fFtT")
   return . Boolean $ case toLower bool of
                't' -> True
                'f' -> False
@@ -59,6 +59,7 @@ data Expr = Number Integer
       | Symbol String
       | Boolean Bool
       | List [Expr]
+      | Procedure { procEnv :: Env, procArgs :: [Expr], procBody :: Expr }
       | Void -- mutations using the set! special form has no value so void
              -- is used instead
 
@@ -69,6 +70,7 @@ instance Show Expr where
   show (Symbol sym) = sym
   show (Boolean bool) = if bool then "#t" else "#f"
   show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
+  show (Procedure _ _ _) = "#<procedure>"
   show Void = "#<void>"
 
 joinOn :: String -> [String] -> String
@@ -226,6 +228,9 @@ eval env (List (Symbol "set!":_)) = throwError . InvalidArgument $ "syntax error
 
 eval env (List [Symbol "begin"]) = return Void
 eval env (List (Symbol "begin":exprs)) = mapM (eval env) exprs >>= return . last
+
+eval env (List (Symbol "lambda":(List args):body)) =
+  return . Procedure env args $ (head body)
 
 -- eval for function application
 eval env expr@(List (func:args)) = 
