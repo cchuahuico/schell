@@ -210,7 +210,7 @@ list = return . List
 
 eval :: Env -> Expr -> ErrorT EvalError IO Expr
 -- eval for special forms
-eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
+eval env (List [Symbol "if", pred, tbr, fbr]) = do
   res <- eval env pred
   case res of
     (Boolean val)
@@ -220,14 +220,18 @@ eval env (List (Symbol "if":pred:tbr:fbr:[])) = do
 
 eval env (List (Symbol "if":_)) = throwError . InvalidArgument $ "syntax error on if special form"
 
-eval env (List (Symbol "define":ident:expr:[])) = do
+eval env (List [Symbol "define", (List (name:args)), body]) = do
+  defineVar env name $ Procedure env args body
+  return Void
+
+eval env (List [Symbol "define", ident, expr]) = do
   evaled <- eval env expr
   defineVar env ident evaled 
   return Void
 
 eval env (List (Symbol "define":_)) = throwError . InvalidArgument $ "syntax error on define special form"
 
-eval env (List (Symbol "set!":ident:expr:[])) = do
+eval env (List [Symbol "set!", ident, expr]) = do
   evaled <- eval env expr
   setVar env ident evaled
   return Void
@@ -248,7 +252,12 @@ eval env expr@(List (func:args)) =
       | isLambda func -> do
           proc <- eval env func
           mapM (eval env) args >>= applyComplex proc
-      | otherwise -> throwError . UnboundError . show $ func
+      | otherwise -> do
+          res <- liftIO. lookupVar env $ func
+          case res of
+            Just proc -> mapM (eval env) args >>= applyComplex proc
+            Nothing -> throwError . UnboundError . show $ func
+
 
 -- eval for atoms
 eval env num@(Number _) = return num
