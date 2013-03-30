@@ -109,6 +109,14 @@ type Env = IORef [(String, IORef Expr)]
 createEnv :: IO Env
 createEnv = newIORef []
 
+extendEnv :: Env -> [Expr] -> [Expr] -> IO Env
+extendEnv env symbols values = do
+  curEnv <- readIORef env
+  extendedEnv <- createEnv
+  newBindings <- mapM newIORef values >>= return . zip [sym | (Symbol sym) <- symbols] 
+  modifyIORef extendedEnv ((newBindings ++ curEnv) ++)
+  return extendedEnv
+
 defineVar :: Env -> Expr -> Expr -> ErrorT EvalError IO ()
 defineVar env symb@(Symbol sym) expr = do
   val <- liftIO . lookupVar env $ symb
@@ -162,27 +170,27 @@ isListExpr :: Expr -> Bool
 isListExpr (List _) = True
 isListExpr _ = False
 
+isLambda :: Expr -> Bool
+isLambda (List (Symbol "lambda":others)) = True
+isLambda _ = False
+
 arithmeticOp :: (Integer -> Integer -> Integer) -> [Expr] -> ErrorT EvalError IO Expr
 arithmeticOp op exprs 
   | all isNumberExpr exprs = return . Number . foldl1 op $ [x | (Number x) <- exprs]
-  | otherwise = throwError $ SyntaxError "**Error: \
-      \Arithmetic expressions are of the form: ([+/-/*//] Num1 Num2 .. NumN)**"
+  | otherwise = throwError $ SyntaxError "**Error: Arithmetic expressions are of the form: ([+/-/*//] Num1 Num2 .. NumN)**"
 
 compOp :: (Integer -> Integer -> Bool) -> [Expr] -> ErrorT EvalError IO Expr
 compOp op [Number a, Number b] = return . Boolean $ op a b
-compOp _ _ = throwError $ SyntaxError "**Error: \
-  \Comparison expressions are of the form: ([</<=/>/>=/=] Num1 Num2)**"
+compOp _ _ = throwError $ SyntaxError "**Error: Comparison expressions are of the form: ([</<=/>/>=/=] Num1 Num2)**"
 
 logicOp :: ([Bool] -> Bool) -> [Expr] -> ErrorT EvalError IO Expr
 logicOp op exprs
   | all isBoolExpr exprs = return . Boolean . op $ [b | (Boolean b) <- exprs]
-  | otherwise = throwError $ SyntaxError "**Error: \
-      \Logical operators are of the form: ([and/or] expr1 expr2 .. exprN)**"
+  | otherwise = throwError $ SyntaxError "**Error: Logical operators are of the form: ([and/or] expr1 expr2 .. exprN)**"
 
 notOp :: [Expr] -> ErrorT EvalError IO Expr
 notOp [Boolean b] = return . Boolean . not $ b
-notOp _ = throwError $ SyntaxError "**Error: \
- \Not logical operators are of the form: (not expr1)**"
+notOp _ = throwError $ SyntaxError "**Error: Not logical operators are of the form: (not expr1)**"
 
 car :: [Expr] -> ErrorT EvalError IO Expr
 car [List xs] = return . head $ xs
@@ -235,8 +243,12 @@ eval env (List (Symbol "lambda":(List args):body)) =
 -- eval for function application
 eval env expr@(List (func:args)) = 
   case lookup func primitives of
-    Just f -> mapM (eval env) args >>= apply f
-    Nothing -> throwError . UnboundError . show $ func
+    Just f -> mapM (eval env) args >>= applyPrimitive f
+    Nothing
+      | isLambda func -> do
+          proc <- eval env func
+          mapM (eval env) args >>= applyComplex proc
+      | otherwise -> throwError . UnboundError . show $ func
 
 -- eval for atoms
 eval env num@(Number _) = return num
@@ -252,5 +264,14 @@ eval env sym = do
             
 
 -- the apply function is limited to primitives for now, until lambdas are implemented
-apply :: ([Expr] -> ErrorT EvalError IO Expr) -> [Expr] -> ErrorT EvalError IO Expr
-apply func args = func args
+applyPrimitive :: ([Expr] -> ErrorT EvalError IO Expr) -> [Expr] -> ErrorT EvalError IO Expr
+applyPrimitive func args = func args
+
+applyComplex :: Expr -> [Expr] -> ErrorT EvalError IO Expr
+applyComplex (Procedure env formals body) args 
+  | length formals == length args = do
+      extended <- liftIO . extendEnv env formals $ args
+      eval extended body
+  | otherwise = throwError . InvalidArgument $ "arity mismatch in lambda expression"
+applyComplex _ _ = throwError . SyntaxError $ "!! Something really bad happened !!"
+
