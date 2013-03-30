@@ -263,10 +263,11 @@ eval env sym = do
     Nothing -> throwError . UnboundError . show $ sym
             
 
--- the apply function is limited to primitives for now, until lambdas are implemented
+-- apply for procedures that are defined in the global environment (ie. primitives)
 applyPrimitive :: ([Expr] -> ErrorT EvalError IO Expr) -> [Expr] -> ErrorT EvalError IO Expr
 applyPrimitive func args = func args
 
+-- apply for lambdas 
 applyComplex :: Expr -> [Expr] -> ErrorT EvalError IO Expr
 applyComplex (Procedure env formals body) args 
   | length formals == length args = do
