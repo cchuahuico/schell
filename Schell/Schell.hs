@@ -207,6 +207,11 @@ cons _ = throwError $ SyntaxError "**Error: cons expressions are of the form: (c
 list :: [Expr] -> ErrorT EvalError IO Expr
 list = return . List 
 
+parseLetBindings :: [Expr] -> ([Expr], [Expr])
+parseLetBindings [] = ([], [])
+parseLetBindings (x:xs) = let (List [sym, val]) = x in
+  ([sym] ++ symNext, [val] ++ valNext)
+  where (symNext, valNext) = parseLetBindings xs
 
 eval :: Env -> Expr -> ErrorT EvalError IO Expr
 -- eval for special forms
@@ -241,8 +246,16 @@ eval env (List (Symbol "set!":_)) = throwError . InvalidArgument $ "syntax error
 eval env (List [Symbol "begin"]) = return Void
 eval env (List (Symbol "begin":exprs)) = mapM (eval env) exprs >>= return . last
 
-eval env (List (Symbol "lambda":(List args):body)) =
-  return . Procedure env args $ (head body)
+eval env (List [Symbol "lambda", (List args), body]) =
+  return . Procedure env args $ body
+
+eval env (List (Symbol "lambda":_)) = throwError . InvalidArgument $ "syntax error on lambda special form"
+
+eval env (List [Symbol "let", (List bindings), body]) =
+  let (symbols, vals) = parseLetBindings bindings in
+    mapM (eval env) vals >>= applyComplex (Procedure env symbols body) 
+
+eval env (List (Symbol "let":_)) = throwError . InvalidArgument $ "syntax error on let"
 
 -- eval for function application
 eval env expr@(List (func:args)) = 
@@ -284,4 +297,3 @@ applyComplex (Procedure env formals body) args
       eval extended body
   | otherwise = throwError . InvalidArgument $ "arity mismatch in lambda expression"
 applyComplex _ _ = throwError . SyntaxError $ "!! Something really bad happened !!"
-
