@@ -17,9 +17,6 @@ main = do
       exitSuccess
      else
        case parseSource input of 
-         (Left err) -> putStrLn $ show err
-         (Right expr) -> do
-           res <- liftIO . runErrorT . eval env $ expr
-           case res of
-             (Left err) -> putStrLn . show $ err
-             (Right res) -> putStrLn . show $ res
+         (Left err) -> print err
+         (Right exprs) -> 
+           (runErrorT . mapM (eval env) $ exprs) >>= either print (mapM_ print)

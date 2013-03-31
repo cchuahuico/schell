@@ -49,8 +49,8 @@ readString = do
   char '"'
   return $ String str
 
-parseSource :: String -> Either ParseError Expr 
-parseSource input = parse (skipMany space >> readExpr) "Syntax Error" input
+parseSource :: String -> Either ParseError [Expr] 
+parseSource input = parse (many $ (skipMany space >> readExpr)) "Syntax Error" input
 
 
 data Expr = Number Integer
