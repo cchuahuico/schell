@@ -9,6 +9,9 @@ import Schell
 main :: IO ()
 main = do
   env <- createEnv
+  emptyEnv <- createEnv
+  extendEnv env primitiveSymbols $
+    map (\name -> Procedure name emptyEnv [] Void) primitiveSymbols
   forever $ do
   putStr "schell> " >> hFlush stdout
   input <- getLine

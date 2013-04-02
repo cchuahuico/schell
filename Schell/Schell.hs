@@ -3,6 +3,7 @@ module Schell where
 import Text.ParserCombinators.Parsec
 import Data.Char
 import Data.Either
+import Data.Maybe
 import Text.Printf
 import Control.Monad
 import Control.Monad.Error
@@ -59,7 +60,7 @@ data Expr = Number Integer
       | Symbol String
       | Boolean Bool
       | List [Expr]
-      | Procedure { procEnv :: Env, procArgs :: [Expr], procBody :: Expr }
+      | Procedure { procName :: Expr, procEnv :: Env, procArgs :: [Expr], procBody :: Expr }
       | Void -- mutations using the set! special form has no value so void
              -- is used instead
 
@@ -70,7 +71,7 @@ instance Show Expr where
   show (Symbol sym) = sym
   show (Boolean bool) = if bool then "#t" else "#f"
   show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
-  show (Procedure _ _ _) = "#<procedure>"
+  show (Procedure _ _ _ _) = "#<procedure>"
   show Void = "#<void>"
 
 joinOn :: String -> [String] -> String
@@ -91,15 +92,17 @@ data EvalError = UnboundError String
          | SyntaxError String
          | InvalidArgument String
          | BindExists String
+         | OtherError 
 
 instance Error EvalError where
-  strMsg s = SyntaxError "error"
+  strMsg s = OtherError 
 
 instance Show EvalError where
   show (UnboundError var) = printf "**Error: identifier: %s not bound.**" var
   show (SyntaxError msg) = printf "**Error: %s.**" msg
   show (InvalidArgument msg) = printf "**Error: %s. **" msg
   show (BindExists var) = printf "**Error: binding for %s already exists. **" var
+  show OtherError = printf "**Error: malformed expression. **"
 
 
 -- the type that represents the global environment
@@ -144,24 +147,21 @@ lookupVar env (Symbol sym) = do
     Just val -> readIORef val >>= (\actual -> return . Just $ actual)
     Nothing -> return Nothing
 
+primitiveStrs :: [String]
+primitiveStrs = ["+", "-", "*", "/", "<", "<=", ">", ">=", "=", "and",
+  "or", "not", "cons", "list", "car", "cdr"]
+
+primitiveSymbols :: [Expr]
+primitiveSymbols = map Symbol primitiveStrs
+
+primitiveProcs :: [([Expr] -> ErrorT EvalError IO Expr)]
+primitiveProcs = [arithmeticOp (+), arithmeticOp (-), arithmeticOp (*), arithmeticOp div,
+  compOp (<), compOp (<=), compOp (>), compOp (>=), compOp (==), logicOp and, logicOp or,
+  notOp, cons, list, car, cdr] 
+
 -- primitive functions that's referenced by apply
 primitives :: [(Expr, [Expr] -> ErrorT EvalError IO Expr)]
-primitives = [(Symbol "+", arithmeticOp (+)),
-        (Symbol "-", arithmeticOp (-)),
-        (Symbol "*", arithmeticOp (*)),
-        (Symbol "/", arithmeticOp div),
-        (Symbol "<", compOp (<)),
-        (Symbol "<=", compOp (<=)),
-        (Symbol ">", compOp (>)),
-        (Symbol ">=", compOp (>=)),
-        (Symbol "=", compOp (==)),
-        (Symbol "and", logicOp and),
-        (Symbol "or", logicOp or),
-        (Symbol "not", notOp),
-        (Symbol "cons", cons),
-        (Symbol "list", list),
-        (Symbol "car", car),
-        (Symbol "cdr", cdr)]
+primitives = zip primitiveSymbols primitiveProcs
 
 isNumberExpr :: Expr -> Bool
 isNumberExpr (Number _) = True
@@ -231,7 +231,7 @@ eval env (List [Symbol "if", pred, tbr, fbr]) = do
 eval env (List (Symbol "if":_)) = throwError . InvalidArgument $ "syntax error on if special form"
 
 eval env (List [Symbol "define", (List (name:args)), body]) = do
-  defineVar env name $ Procedure env args body
+  defineVar env name $ Procedure name env args body
   return Void
 
 eval env (List [Symbol "define", ident, expr]) = do
@@ -249,33 +249,38 @@ eval env (List [Symbol "set!", ident, expr]) = do
 eval env (List (Symbol "set!":_)) = throwError . InvalidArgument $ "syntax error on set! special form"
 
 eval env (List [Symbol "begin"]) = return Void
+
 eval env (List (Symbol "begin":exprs)) = mapM (eval env) exprs >>= return . last
 
 eval env (List [Symbol "lambda", (List args), body]) =
-  return . Procedure env args $ body
+  return . Procedure (Symbol "#<lambda>") env args $ body
 
 eval env (List (Symbol "lambda":_)) = throwError . InvalidArgument $ "syntax error on lambda special form"
 
 eval env (List [Symbol "let", (List bindings), body]) =
   let (symbols, vals) = parseLetBindings bindings in
-    mapM (eval env) vals >>= applyComplex (Procedure env symbols body) 
+    mapM (eval env) vals >>= applyComplex (Procedure (Symbol "#<lambda>") env symbols body) 
 
 eval env (List (Symbol "let":_)) = throwError . InvalidArgument $ "syntax error on let"
 
 -- eval for function application
 eval env expr@(List (func:args)) = 
   case lookup func primitives of
-    Just f -> mapM (eval env) args >>= applyPrimitive f
+    Just f -> applyToArgs . applyPrimitive $ f
     Nothing
       | isLambda func -> do
           proc <- eval env func
-          mapM (eval env) args >>= applyComplex proc
+          applyToArgs . applyComplex $ proc 
       | otherwise -> do
-          res <- liftIO. lookupVar env $ func
+          Procedure name _ _ _ <- eval env func
+          res <- liftIO . lookupVar env $ name
           case res of
-            Just proc -> mapM (eval env) args >>= applyComplex proc
+            Just proc@(Procedure pName _ _ _)
+              | pName `elem` primitiveSymbols -> 
+                  applyToArgs . applyPrimitive . fromJust . lookup pName $ primitives
+              | otherwise -> applyToArgs . applyComplex $ proc
             Nothing -> throwError . UnboundError . show $ func
-
+  where applyToArgs applyF = mapM (eval env) args >>= applyF
 
 -- eval for atoms
 eval env num@(Number _) = return num
@@ -296,9 +301,10 @@ applyPrimitive func args = func args
 
 -- apply for lambdas 
 applyComplex :: Expr -> [Expr] -> ErrorT EvalError IO Expr
-applyComplex (Procedure env formals body) args 
+applyComplex (Procedure name env formals body) args 
   | length formals == length args = do
       extended <- liftIO . copyAndExtend env formals $ args
       eval extended body
   | otherwise = throwError . InvalidArgument $ "arity mismatch in lambda expression"
-applyComplex _ _ = throwError . SyntaxError $ "!! Something really bad happened !!"
+
+applyComplex _ _ = throwError . SyntaxError $ "attempted to apply a non-procedure expression"
