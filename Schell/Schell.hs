@@ -109,8 +109,13 @@ type Env = IORef [(String, IORef Expr)]
 createEnv :: IO Env
 createEnv = newIORef []
 
-extendEnv :: Env -> [Expr] -> [Expr] -> IO Env
+extendEnv :: Env -> [Expr] -> [Expr] -> IO ()
 extendEnv env symbols values = do
+  newBindings <- mapM newIORef values >>= return . zip [sym | (Symbol sym) <- symbols] 
+  modifyIORef env (newBindings ++)
+
+copyAndExtend :: Env -> [Expr] -> [Expr] -> IO Env
+copyAndExtend env symbols values = do
   curEnv <- readIORef env
   extendedEnv <- createEnv
   newBindings <- mapM newIORef values >>= return . zip [sym | (Symbol sym) <- symbols] 
@@ -293,7 +298,7 @@ applyPrimitive func args = func args
 applyComplex :: Expr -> [Expr] -> ErrorT EvalError IO Expr
 applyComplex (Procedure env formals body) args 
   | length formals == length args = do
-      extended <- liftIO . extendEnv env formals $ args
+      extended <- liftIO . copyAndExtend env formals $ args
       eval extended body
   | otherwise = throwError . InvalidArgument $ "arity mismatch in lambda expression"
 applyComplex _ _ = throwError . SyntaxError $ "!! Something really bad happened !!"
