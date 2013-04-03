@@ -13,7 +13,7 @@ import Data.IORef
 identifierInit :: Parser Char
 identifierInit = oneOf "!$%&*/:<=>?~_^" 
 
-readExpr = do
+readExpr = 
   readLst <|> readString <|> readNumber <|> readSymbol <|> readBoolean <|> readCharacter  
 
 readSymbol = do
@@ -49,10 +49,6 @@ readString = do
   str <- many1 (noneOf "\"")
   char '"'
   return $ String str
-
-parseSource :: String -> Either ParseError [Expr] 
-parseSource input = parse (many $ (skipMany space >> readExpr)) "Syntax Error" input
-
 
 data Expr = Number Integer
       | Character Char
