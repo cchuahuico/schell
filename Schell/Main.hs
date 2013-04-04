@@ -4,6 +4,7 @@ import System.Exit
 import Control.Monad
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec
+import Data.IORef
 import System.IO
 import Schell
 
@@ -33,5 +34,7 @@ main = do
   input <- getLine
   case words input of
     [":q"] -> exitSuccess
-    [":l", file] -> parseFile file >>= evalAndPrint env
+    [":l", file] -> do
+      modifyIORef env (\_ -> [])
+      parseFile file >>= evalAndPrint env
     sepInput -> evalAndPrint env . parseSource . unwords $ sepInput
