@@ -171,10 +171,6 @@ isListExpr :: Expr -> Bool
 isListExpr (List _) = True
 isListExpr _ = False
 
-isLambda :: Expr -> Bool
-isLambda (List (Symbol "lambda":others)) = True
-isLambda _ = False
-
 arithmeticOp :: (Integer -> Integer -> Integer) -> [Expr] -> ErrorT EvalError IO Expr
 arithmeticOp op exprs 
   | all isNumberExpr exprs = return . Number . foldl1 op $ [x | (Number x) <- exprs]
@@ -260,22 +256,38 @@ eval env (List [Symbol "let", (List bindings), body]) =
 eval env (List (Symbol "let":_)) = throwError . InvalidArgument $ "syntax error on let"
 
 -- eval for function application
+
+-- there's a problem with things like (define square (lambda (x) ...))
+-- because the lambda expression does not have a name of square which is
+-- what lookupvar bases it on. a solution it seems is to separate the handling
+-- of those function application expressions where the expr in the function position
+-- is a pair
+--
+
+
+eval env (List ((List x):args))
+  | head x == Symbol "lambda" = do
+      proc <- eval env $ List x
+      applyToArgs . applyComplex $ proc 
+  | otherwise = do
+      Procedure name _ _ _ <- eval env $ List x
+      res <- liftIO . lookupVar env $ name
+      case res of
+        Just proc@(Procedure pName _ _ _)
+          | pName `elem` primitiveSymbols -> 
+              applyToArgs . applyPrimitive . fromJust . lookup pName $ primitives
+          | otherwise -> applyToArgs . applyComplex $ proc
+        Nothing -> throwError . UnboundError . show $ name
+  where applyToArgs applyF = mapM (eval env) args >>= applyF
+
 eval env expr@(List (func:args)) = 
   case lookup func primitives of
     Just f -> applyToArgs . applyPrimitive $ f
-    Nothing
-      | isLambda func -> do
-          proc <- eval env func
-          applyToArgs . applyComplex $ proc 
-      | otherwise -> do
-          Procedure name _ _ _ <- eval env func
-          res <- liftIO . lookupVar env $ name
-          case res of
-            Just proc@(Procedure pName _ _ _)
-              | pName `elem` primitiveSymbols -> 
-                  applyToArgs . applyPrimitive . fromJust . lookup pName $ primitives
-              | otherwise -> applyToArgs . applyComplex $ proc
-            Nothing -> throwError . UnboundError . show $ func
+    Nothing -> do
+      res <- liftIO . lookupVar env $ func
+      case res of 
+        Just proc -> applyToArgs . applyComplex $ proc
+        Nothing -> throwError . UnboundError . show $ func
   where applyToArgs applyF = mapM (eval env) args >>= applyF
 
 -- eval for atoms
