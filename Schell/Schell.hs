@@ -244,41 +244,25 @@ eval env (List [Symbol "begin"]) = return Void
 
 eval env (List (Symbol "begin":exprs)) = mapM (eval env) exprs >>= return . last
 
-eval env (List [Symbol "lambda", (List args), body]) =
-  return . Procedure (Symbol "#<lambda>") env args $ body
+eval env (List [Symbol "lambda", (List args), body]) = 
+  return . Procedure (Symbol "lambda") env args $ body
 
 eval env (List (Symbol "lambda":_)) = throwError . InvalidArgument $ "syntax error on lambda special form"
 
 eval env (List [Symbol "let", (List bindings), body]) =
   let (symbols, vals) = parseLetBindings bindings in
-    mapM (eval env) vals >>= applyComplex (Procedure (Symbol "#<lambda>") env symbols body) 
+    mapM (eval env) vals >>= applyComplex (Procedure (Symbol "lambda") env symbols body) 
 
 eval env (List (Symbol "let":_)) = throwError . InvalidArgument $ "syntax error on let"
 
 -- eval for function application
-
--- there's a problem with things like (define square (lambda (x) ...))
--- because the lambda expression does not have a name of square which is
--- what lookupvar bases it on. a solution it seems is to separate the handling
--- of those function application expressions where the expr in the function position
--- is a pair
---
-
-
 eval env (List ((List x):args))
   | head x == Symbol "lambda" = do
       proc <- eval env $ List x
-      applyToArgs . applyComplex $ proc 
+      mapM (eval env) args >>= applyComplex proc
   | otherwise = do
       Procedure name _ _ _ <- eval env $ List x
-      res <- liftIO . lookupVar env $ name
-      case res of
-        Just proc@(Procedure pName _ _ _)
-          | pName `elem` primitiveSymbols -> 
-              applyToArgs . applyPrimitive . fromJust . lookup pName $ primitives
-          | otherwise -> applyToArgs . applyComplex $ proc
-        Nothing -> throwError . UnboundError . show $ name
-  where applyToArgs applyF = mapM (eval env) args >>= applyF
+      eval env $ List (name:args)
 
 eval env expr@(List (func:args)) = 
   case lookup func primitives of
@@ -302,7 +286,6 @@ eval env sym = do
     Just expr -> return expr
     Nothing -> throwError . UnboundError . show $ sym
             
-
 -- apply for procedures that are defined in the global environment (ie. primitives)
 applyPrimitive :: ([Expr] -> ErrorT EvalError IO Expr) -> [Expr] -> ErrorT EvalError IO Expr
 applyPrimitive func args = func args
