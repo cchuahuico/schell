@@ -233,6 +233,11 @@ eval env (List [Symbol "define", ident, expr]) = do
 
 eval env (List (Symbol "define":_)) = throwError . InvalidArgument $ "syntax error on define special form"
 
+eval env (List [Symbol "quote", literal]) =
+  return . Symbol . show $ literal
+
+eval env (List (Symbol "quote":_)) = throwError . InvalidArgument $ "syntax error on quote special form"
+
 eval env (List [Symbol "set!", ident, expr]) = do
   evaled <- eval env expr
   setVar env ident evaled
