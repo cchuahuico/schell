@@ -6,13 +6,5 @@ cabal-version:       >=1.8
 
 executable schell
   main-is: Main.hs
-  build-depends: base, parsec
+  build-depends: base, parsec, mtl, text
   hs-source-dirs: Schell
-
-Test-suite tests
-  type: exitcode-stdio-1.0
-  hs-source-dirs: Test, Schell
-  Main-is: Test.hs
-  build-depends: base, HUnit, parsec
-  other-modules: Schell
-
