@@ -9,6 +9,7 @@ import Data.Text (unpack, strip, pack)
 import System.IO
 import System.Environment
 import Schell
+import Parser
 
 schemeParser = many $ skipMany space >> readExpr
 

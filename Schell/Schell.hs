@@ -1,54 +1,10 @@
 module Schell where
 
-import Text.ParserCombinators.Parsec
-import Data.Char
 import Data.Either
 import Data.Maybe
 import Text.Printf
-import Control.Monad
 import Control.Monad.Error
 import Data.IORef
-
-
-identifierInit :: Parser Char
-identifierInit = oneOf "!$%&*/:<=>?~_^" 
-
-readExpr = 
-  readLst <|> readString <|> readNumber <|> readSymbol <|> readBoolean <|> readCharacter  
-
-readSymbol = do
-  initial <- letter <|> identifierInit <|> oneOf "+-"
-  subsq <- many (letter <|> identifierInit <|> digit <|> oneOf ".+-")
-  return $ Symbol (initial:subsq)
-
-readLst = do
-  char '('
-  x <- sepBy readExpr spaces
-  char ')'
-  return $ List x
-
-readBoolean = do
-  bool <- try (char '#' >> oneOf "fFtT")
-  return . Boolean $ case toLower bool of
-               't' -> True
-               'f' -> False
-
-negNum = liftM ('-':) (char '-' >> many1 digit)
-
-readNumber = do
-  num <- try negNum <|> many1 digit
-  return . Number $ (read num :: Integer)
-
-readCharacter = do
-  string "#\\"
-  c <- anyChar
-  return $ Character c
-
-readString = do
-  char '"'
-  str <- many1 (noneOf "\"")
-  char '"'
-  return $ String str
 
 data Expr = Number Integer
       | Character Char
