@@ -5,7 +5,9 @@ import Control.Monad
 import Control.Monad.Error
 import Text.ParserCombinators.Parsec
 import Data.IORef
+import Data.Text (unpack, strip, pack)
 import System.IO
+import System.Environment
 import Schell
 
 schemeParser = many $ skipMany space >> readExpr
@@ -14,7 +16,7 @@ parseSource :: String -> Either ParseError [Expr]
 parseSource input = parse schemeParser "Syntax Error" input
 
 parseFile :: String -> IO (Either ParseError [Expr])
-parseFile file = liftM (parseSource . init) $ readFile file 
+parseFile file = liftM (parseSource . unpack . strip . pack) $ readFile file 
 
 evalAndPrint :: Env -> Either ParseError [Expr] -> IO ()
 evalAndPrint env parseResult = 
@@ -25,16 +27,21 @@ evalAndPrint env parseResult =
 
 main :: IO ()
 main = do
+  args <- getArgs
   env <- createEnv
   emptyEnv <- createEnv
   extendEnv env primitiveSymbols $
     map (\name -> Procedure name emptyEnv [] Void) primitiveSymbols
-  forever $ do
-  putStr "schell> " >> hFlush stdout
-  input <- getLine
-  case words input of
-    [":q"] -> exitSuccess
-    [":l", file] -> do
+  if null args 
+    then forever $ do
+      putStr "schell> " >> hFlush stdout
+      input <- getLine
+      case words input of
+        [":q"] -> exitSuccess
+        [":l", file] -> do
+          modifyIORef env (\_ -> [])
+          parseFile file >>= evalAndPrint env
+        sepInput -> evalAndPrint env . parseSource . unwords $ sepInput
+    else do
       modifyIORef env (\_ -> [])
-      parseFile file >>= evalAndPrint env
-    sepInput -> evalAndPrint env . parseSource . unwords $ sepInput
+      parseFile (head args) >>= evalAndPrint env
