@@ -26,13 +26,17 @@ evalAndPrint env parseResult =
     Right exprs -> 
       (runErrorT . mapM (eval env) $ exprs) >>= either print (mapM_ print)
 
+loadInitialEnv :: Env -> IO ()
+loadInitialEnv env = do
+  emptyEnv <- createEnv
+  extendEnv env primitiveSymbols $
+    map (\name -> Procedure name emptyEnv [] Void) primitiveSymbols
+
 main :: IO ()
 main = do
   args <- getArgs
   env <- createEnv
-  emptyEnv <- createEnv
-  extendEnv env primitiveSymbols $
-    map (\name -> Procedure name emptyEnv [] Void) primitiveSymbols
+  loadInitialEnv env  
   if null args 
     then forever $ do
       putStr "schell> " >> hFlush stdout
@@ -41,6 +45,7 @@ main = do
         [":q"] -> exitSuccess
         [":l", file] -> do
           modifyIORef env (\_ -> [])
+          loadInitialEnv env
           parseFile file >>= evalAndPrint env
         sepInput -> evalAndPrint env . parseSource . unwords $ sepInput
     else do
