@@ -23,7 +23,7 @@ instance Show Expr where
   show (Symbol sym) = sym
   show (Boolean bool) = if bool then "#t" else "#f"
   show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
-  show (Procedure _ _ _ _) = "#<procedure>"
+  show (Procedure name _ _ _) = "#<procedure:" ++ show name ++ ">"
   show Void = "#<void>"
 
 joinOn :: String -> [String] -> String
@@ -101,7 +101,7 @@ lookupVar env (Symbol sym) = do
 
 primitiveStrs :: [String]
 primitiveStrs = ["+", "-", "*", "/", "<", "<=", ">", ">=", "=", "and",
-  "or", "not", "cons", "list", "car", "cdr"]
+  "or", "not", "cons", "list", "car", "cdr", "null?"]
 
 primitiveSymbols :: [Expr]
 primitiveSymbols = map Symbol primitiveStrs
@@ -109,7 +109,7 @@ primitiveSymbols = map Symbol primitiveStrs
 primitiveProcs :: [([Expr] -> ErrorT EvalError IO Expr)]
 primitiveProcs = [arithmeticOp (+), arithmeticOp (-), arithmeticOp (*), arithmeticOp div,
   compOp (<), compOp (<=), compOp (>), compOp (>=), compOp (==), logicOp and, logicOp or,
-  notOp, cons, list, car, cdr] 
+  notOp, cons, list, car, cdr, nullOp] 
 
 -- primitive functions that's referenced by apply
 primitives :: [(Expr, [Expr] -> ErrorT EvalError IO Expr)]
@@ -159,6 +159,9 @@ cons _ = throwError $ SyntaxError "**Error: cons expressions are of the form: (c
 
 list :: [Expr] -> ErrorT EvalError IO Expr
 list = return . List 
+
+nullOp :: [Expr] -> ErrorT EvalError IO Expr
+nullOp [List x] = return . Boolean . null $ x
 
 parseLetBindings :: [Expr] -> ([Expr], [Expr])
 parseLetBindings [] = ([], [])
@@ -217,22 +220,19 @@ eval env (List [Symbol "let", (List bindings), body]) =
 eval env (List (Symbol "let":_)) = throwError . InvalidArgument $ "syntax error on let"
 
 -- eval for function application
-eval env (List ((List x):args))
-  | head x == Symbol "lambda" = do
-      proc <- eval env $ List x
+eval env (List (func:args)) = do
+  proc <- eval env func
+  if procName proc == Symbol "lambda" 
+    then 
       mapM (eval env) args >>= applyComplex proc
-  | otherwise = do
-      Procedure name _ _ _ <- eval env $ List x
-      eval env $ List (name:args)
-
-eval env expr@(List (func:args)) = 
-  case lookup func primitives of
-    Just f -> applyToArgs . applyPrimitive $ f
-    Nothing -> do
-      res <- liftIO . lookupVar env $ func
-      case res of 
-        Just proc -> applyToArgs . applyComplex $ proc
-        Nothing -> throwError . UnboundError . show $ func
+    else
+      case lookup (procName proc) primitives of
+        Just f -> applyToArgs . applyPrimitive $ f
+        Nothing -> do
+          res <- liftIO . lookupVar env . procName $ proc
+          case res of 
+            Just proc -> applyToArgs . applyComplex $ proc
+            Nothing -> throwError . UnboundError . show $ func
   where applyToArgs applyF = mapM (eval env) args >>= applyF
 
 -- eval for atoms
