@@ -44,5 +44,4 @@ main = do
           parseFile file >>= evalAndPrint env
         sepInput -> evalAndPrint env . parseSource . unwords $ sepInput
     else do
-      modifyIORef env (\_ -> [])
       parseFile (head args) >>= evalAndPrint env
