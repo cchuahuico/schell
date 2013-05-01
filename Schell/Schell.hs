@@ -156,6 +156,7 @@ cdr _ = throwError $ SyntaxError "**Error: cdr takes a list of data**"
 
 cons :: [Expr] -> ErrorT EvalError IO Expr
 cons [x, List xs] = return . List $ (x:xs)
+cons [x, Symbol "()"] = return . List $ (x:[])
 cons _ = throwError $ SyntaxError "**Error: cons expressions are of the form: (cons x (list ..))**"
 
 list :: [Expr] -> ErrorT EvalError IO Expr
