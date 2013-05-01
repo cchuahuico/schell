@@ -27,6 +27,7 @@ instance Show Expr where
   show Void = "#<void>"
 
 joinOn :: String -> [String] -> String
+joinOn _ [] = ""
 joinOn _ [x] = x
 joinOn joinStr (x:xs) = (x ++ joinStr) ++ (joinOn joinStr xs)
 
