@@ -2,7 +2,7 @@
 
 cabal clean && cabal configure && cabal build
 
-TESTS="define closure exprs"
+TESTS="define closure exprs primitives"
 
 for test in $TESTS
 do
