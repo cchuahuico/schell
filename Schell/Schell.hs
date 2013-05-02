@@ -156,7 +156,6 @@ cdr _ = throwError $ SyntaxError "**Error: cdr takes a list of data**"
 
 cons :: [Expr] -> ErrorT EvalError IO Expr
 cons [x, List xs] = return . List $ (x:xs)
-cons [x, Symbol "()"] = return . List $ (x:[])
 cons _ = throwError $ SyntaxError "**Error: cons expressions are of the form: (cons x (list ..))**"
 
 list :: [Expr] -> ErrorT EvalError IO Expr
@@ -194,8 +193,9 @@ eval env (List [Symbol "define", ident, expr]) = do
 
 eval env (List (Symbol "define" : _)) = throwError . InvalidArgument $ "syntax error on define special form"
 
-eval env (List [Symbol "quote", literal]) =
-  return . Symbol . show $ literal
+eval env (List [Symbol "quote", literal])
+  | isListExpr literal = return literal
+  | otherwise = return . Symbol . show $ literal
 
 eval env (List (Symbol "quote" : _)) = throwError . InvalidArgument $ "syntax error on quote special form"
 
