@@ -54,3 +54,4 @@ var
 (take 2 (map square (list 11 7 0 3 9)))
 (drop 5 (list 1 2 3 4 5 6 7 8 9 10))
 (fact 8)
+(zip (list 1 2 3 4) (list 5 6 7 8))
