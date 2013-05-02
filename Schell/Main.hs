@@ -30,7 +30,7 @@ loadInitialEnv :: Env -> IO ()
 loadInitialEnv env = do
   emptyEnv <- createEnv
   extendEnv env primitiveSymbols $
-    map (\name -> Procedure name emptyEnv [] Void) primitiveSymbols
+    map (\name -> Procedure name emptyEnv [] [Void]) primitiveSymbols
 
 main :: IO ()
 main = do

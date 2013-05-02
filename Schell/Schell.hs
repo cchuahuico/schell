@@ -12,7 +12,7 @@ data Expr = Number Integer
       | Symbol String
       | Boolean Bool
       | List [Expr]
-      | Procedure { procName :: Expr, procEnv :: Env, procArgs :: [Expr], procBody :: Expr }
+      | Procedure { procName :: Expr, procEnv :: Env, procArgs :: [Expr], procBody :: [Expr] }
       | Void -- mutations using the set! special form has no value so void
              -- is used instead
 
@@ -23,7 +23,7 @@ instance Show Expr where
   show (Symbol sym) = sym
   show (Boolean bool) = if bool then "#t" else "#f"
   show (List exprs) = "(" ++ (joinOn " " $ map show exprs) ++ ")"
-  show (Procedure name _ _ _) = "#<procedure:" ++ show name ++ ">"
+  show (Procedure name _ _ _) = "#<procedure>"
   show Void = "#<void>"
 
 joinOn :: String -> [String] -> String
@@ -181,9 +181,9 @@ eval env (List [Symbol "if", pred, tbr, fbr]) = do
       | otherwise -> eval env fbr
     _ -> throwError . InvalidArgument $ "1st argument to if must be a predicate"
 
-eval env (List (Symbol "if":_)) = throwError . InvalidArgument $ "syntax error on if special form"
+eval env (List (Symbol "if" : _)) = throwError . InvalidArgument $ "syntax error on if special form"
 
-eval env (List [Symbol "define", (List (name:args)), body]) = do
+eval env (List (Symbol "define" : (List (name:args)) : body)) = do
   defineVar env name $ Procedure name env args body
   return Void
 
@@ -192,30 +192,30 @@ eval env (List [Symbol "define", ident, expr]) = do
   defineVar env ident evaled 
   return Void
 
-eval env (List (Symbol "define":_)) = throwError . InvalidArgument $ "syntax error on define special form"
+eval env (List (Symbol "define" : _)) = throwError . InvalidArgument $ "syntax error on define special form"
 
 eval env (List [Symbol "quote", literal]) =
   return . Symbol . show $ literal
 
-eval env (List (Symbol "quote":_)) = throwError . InvalidArgument $ "syntax error on quote special form"
+eval env (List (Symbol "quote" : _)) = throwError . InvalidArgument $ "syntax error on quote special form"
 
 eval env (List [Symbol "set!", ident, expr]) = do
   evaled <- eval env expr
   setVar env ident evaled
   return Void
 
-eval env (List (Symbol "set!":_)) = throwError . InvalidArgument $ "syntax error on set! special form"
+eval env (List (Symbol "set!" : _)) = throwError . InvalidArgument $ "syntax error on set! special form"
 
 eval env (List [Symbol "begin"]) = return Void
 
-eval env (List (Symbol "begin":exprs)) = mapM (eval env) exprs >>= return . last
+eval env (List (Symbol "begin" : exprs)) = mapM (eval env) exprs >>= return . last
 
-eval env (List [Symbol "lambda", (List args), body]) = 
+eval env (List (Symbol "lambda" : (List args) : body)) = 
   return . Procedure (Symbol "lambda") env args $ body
 
 eval env (List (Symbol "lambda":_)) = throwError . InvalidArgument $ "syntax error on lambda special form"
 
-eval env (List [Symbol "let", (List bindings), body]) =
+eval env (List (Symbol "let" : (List bindings) : body)) =
   let (symbols, vals) = parseLetBindings bindings in
     mapM (eval env) vals >>= applyComplex (Procedure (Symbol "lambda") env symbols body) 
 
@@ -258,7 +258,7 @@ applyComplex :: Expr -> [Expr] -> ErrorT EvalError IO Expr
 applyComplex (Procedure name env formals body) args 
   | length formals == length args = do
       extended <- liftIO . copyAndExtend env formals $ args
-      eval extended body
+      liftM last $ mapM (eval extended) body
   | otherwise = throwError . InvalidArgument $ "arity mismatch in lambda expression"
 
 applyComplex _ _ = throwError . SyntaxError $ "attempted to apply a non-procedure expression"
