@@ -1,0 +1,15 @@
+#<void>
+#<void>
+#<void>
+()
+"hello"
+(car (list (triple myVar) 5 10))
+3
+#<void>
+#t
+#<void>
+11
+64
+0
+"no"
+-7
